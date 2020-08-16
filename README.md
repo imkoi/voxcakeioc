@@ -1,2 +1,2 @@
-# voxcakeioc
+# VoxCake.IoC
 Async IoC
