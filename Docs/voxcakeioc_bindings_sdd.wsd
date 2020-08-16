@@ -1,0 +1,37 @@
+title VoxCake.IoC Bindings SDD
+
+IBinder-->IBinding: Bind<T>
+note right of IBinder: T is Interface => use T as key for dependency in container
+note right of IBinder: T not Interface => add dependency to container and raw bindings
+
+alt And<T>
+    IBinding-->IRawBinding: And<T>
+    note right of IBinding: throw error if T is interface
+    note right of IBinding: throw error if has dependency key in binding sequence
+    note right of IBinding: remove previous dependency from container and add current to raw bindings
+    IRawBinding-->IEndBinding: ToGlobalContainer()
+    note right of IEndBinding: throw error if has no dependency key in binding sequence
+    note right of IEndBinding: move dependency to GlobalContainer
+    
+else As<T>
+    IBinding-->IEndBinding: As<T>
+    note right of IBinding: throw error if T is interface
+    note right of IBinding: throw error if has no dependency key in binding sequence
+    note right of IBinding: throw error if T is interface
+    note right of IBinding: add dependency to container with key
+    
+else To<T>
+    IBinding-->IEndBinding: To<T>
+    note right of IBinding: throw error if T is interface
+    note right of IBinding: throw error if has no raw bindings
+    note right of IBinding: throw error if has dependency key
+    note right of IBinding: make dependency from T
+    note right of IBinding: inject raw bindings to (T)dependency
+    note right of IBinding: add dependency to container
+    
+    
+else ToGlobalContainer()
+    IBinding-->Container: ToGlobalContainer()
+    note right of Container: throw error if has dependency key
+    note right of Container: move dependency to GlobalContainer
+end

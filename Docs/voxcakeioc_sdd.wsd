@@ -1,0 +1,19 @@
+title VoxCake.IoC SDD
+
+Application->IContainer: Subscribe to OnBindDependencies<IBinder> event
+note right of IContainer: Allocating dependencies and moving them to target containers 
+note right of IContainer: Look at VoxCake.IoC Bindings SDD
+
+Application-->IContainer: await WaitForContainerResolveAsync<TContainerHandler>()
+note right of IContainer: Wait until target container will be resolved
+Application->IContainer: await ResolveDependenciesAsync()
+note right of IContainer: Resolve dependencies in container and raise OnRegister callback if exists
+
+note right of Application: Application life-cycle
+Application-->IContainer: GetDependency<TDependency>()
+note right of IContainer: Return target dependency if its exists in container
+IContainer-->Application: (TDependency) dependency
+note right of Application: Application Quit
+
+Application->IContainer: Dispose() 
+note right of IContainer: Clear container and raise OnRemove callback on dependencies if exists

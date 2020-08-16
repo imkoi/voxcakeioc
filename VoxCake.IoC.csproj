@@ -1,0 +1,74 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{B9A6AB12-C400-4A04-8A30-C3704CC31100}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>VoxCake.IoC</RootNamespace>
+    <AssemblyName>VoxCake.IoC</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+    <Reference Include="VoxCake.Common, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\voxcakecommon\bin\Debug\net472\VoxCake.Common.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Source\Bindings\BaseBinding.cs" />
+    <Compile Include="Source\Bindings\Binder\Binder.cs" />
+    <Compile Include="Source\Bindings\Binder\IBinder.cs" />
+    <Compile Include="Source\Bindings\Binding\Binding.cs" />
+    <Compile Include="Source\Bindings\Binding\IBinding.cs" />
+    <Compile Include="Source\Bindings\EndBinding\EndBinding.cs" />
+    <Compile Include="Source\Bindings\EndBinding\IEndBinding.cs" />
+    <Compile Include="Source\Bindings\RawBinding\IDirectBinding.cs" />
+    <Compile Include="Source\Bindings\RawBinding\DirectBinding.cs" />
+    <Compile Include="Source\Containers\Container\Container.cs" />
+    <Compile Include="Source\Containers\Container\IContainer.cs" />
+    <Compile Include="Source\Containers\GlobalContainer.cs" />
+    <Compile Include="Source\DependencyCallbacks\IRegistrableDependency.cs" />
+    <Compile Include="Source\DependencyCallbacks\IRemovableDependency.cs" />
+    <Compile Include="Source\Utilities\BindingUtility.cs" />
+    <Compile Include="Source\Utilities\ConstructorInjector.cs" />
+    <Compile Include="Source\IoCSettings.cs" />
+    <Compile Include="Source\Types\BindingType.cs" />
+    <Compile Include="Source\Types\DependencyCallbackType.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+
+</Project>
