@@ -46,8 +46,41 @@ namespace VoxCake.IoC.Utilities
                 }
             }
         }
+        
+        internal static void InjectDependenciesToInstance(object[] availableDependencies, object instance)
+        {
+            var instanceType = instance.GetType();
+            var constructorParamsCollection = GetInjectableConstructors(instanceType);
 
-        internal static ConstructorInfo GetConstructorWithDependencies(Type type, object[] dependencies)
+            foreach (var constructorParamsPair in constructorParamsCollection)
+            {
+                var constructor = constructorParamsPair.Key;
+                var parameters = constructorParamsPair.Value;
+
+                var isInjectable = true;
+                var parametersCount = parameters.Length;
+                var constructorDependencies = new object[parametersCount];
+                
+                for (var i = 0; i < parametersCount; i++)
+                {
+                    var constructorDependency = GetDependencyOfType(parameters[i], availableDependencies);
+                    constructorDependencies[i] = constructorDependency;
+                    
+                    if (constructorDependency == null)
+                    {
+                        isInjectable = false;
+                        break;
+                    }
+                }
+
+                if (isInjectable)
+                {
+                    constructor.Invoke(instance, constructorDependencies);
+                }
+            }
+        }
+
+        private static ConstructorInfo GetConstructorWithDependencies(Type type, object[] dependencies)
         {
             var constructors = type.GetConstructors(BindingFlag);
             var constructorsCount = constructors.Length;
@@ -123,6 +156,19 @@ namespace VoxCake.IoC.Utilities
         {
             return GetDependencyInCollection(type, localDependencies) 
                    ?? GetDependencyInCollection(type, globalDependencies);
+        }
+
+        private static object GetDependencyOfType(Type type, object[] dependencies)
+        {
+            foreach (var dependency in dependencies)
+            {
+                if (type == dependency.GetType())
+                {
+                    return dependency;
+                }
+            }
+
+            return null;
         }
         
         private static object GetDependencyInCollection(Type type, Dictionary<Type, object> collection)

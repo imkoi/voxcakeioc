@@ -56,7 +56,6 @@
     <Compile Include="Source\Containers\GlobalContainer.cs" />
     <Compile Include="Source\DependencyCallbacks\IRegistrableDependency.cs" />
     <Compile Include="Source\DependencyCallbacks\IRemovableDependency.cs" />
-    <Compile Include="Source\Utilities\BindingUtility.cs" />
     <Compile Include="Source\Utilities\ConstructorInjector.cs" />
     <Compile Include="Source\Types\BindingType.cs" />
     <Compile Include="Source\Types\DependencyCallbackType.cs" />

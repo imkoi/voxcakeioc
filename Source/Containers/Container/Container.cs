@@ -136,8 +136,8 @@ namespace VoxCake.IoC
                     directBindings.Add(containerDependency.Value);
                     await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
                 }
-                
-                BindingUtility.InjectDependenciesToInstance(directBindings.ToArray(), dependency);
+
+                ConstructorInjector.InjectDependenciesToInstance(directBindings.ToArray(), dependency);
 
                 await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
             }
