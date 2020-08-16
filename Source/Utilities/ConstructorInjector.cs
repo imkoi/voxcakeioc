@@ -17,13 +17,13 @@ namespace VoxCake.IoC.Utilities
                                          | BindingFlags.Instance 
                                          | BindingFlags.InvokeMethod;
         
-        internal static async Task InjectDependenciesToInstance(Dictionary<Type, object> localDependencies,
+        internal static async Task InjectDependenciesToInstanceAsync(Dictionary<Type, object> localDependencies,
             Dictionary<Type, object> globalDependencies, object instance, Stopwatch sw, int maxTaskFreezeMs, 
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var instanceType = instance.GetType();
-            var constructorParamsCollection = await GetInjectableConstructors(instanceType,
+            var constructorParamsCollection = await GetInjectableConstructorsAsync(instanceType,
                 sw, maxTaskFreezeMs, cancellationToken);
 
             foreach (var constructorParamsPair in constructorParamsCollection)
@@ -37,7 +37,7 @@ namespace VoxCake.IoC.Utilities
                 
                 for (var i = 0; i < parametersCount; i++)
                 {
-                    var constructorDependency = GetDependencyOfType(parameters[i], localDependencies,
+                    var constructorDependency = GetDependencyOfTypeAsync(parameters[i], localDependencies,
                         globalDependencies);
                     constructorDependencies[i] = constructorDependency;
                     
@@ -59,12 +59,12 @@ namespace VoxCake.IoC.Utilities
             }
         }
         
-        internal static async Task InjectDependenciesToInstance(object[] availableDependencies, object instance,
+        internal static async Task InjectDependenciesToInstanceAsync(object[] availableDependencies, object instance,
             Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var instanceType = instance.GetType();
-            var constructorParamsCollection = await GetInjectableConstructors(instanceType,
+            var constructorParamsCollection = await GetInjectableConstructorsAsync(instanceType,
                 sw, maxTaskFreezeMs, cancellationToken);
 
             foreach (var constructorParamsPair in constructorParamsCollection)
@@ -78,7 +78,7 @@ namespace VoxCake.IoC.Utilities
                 
                 for (var i = 0; i < parametersCount; i++)
                 {
-                    var constructorDependency = await GetDependencyOfType(parameters[i], availableDependencies,
+                    var constructorDependency = await GetDependencyOfTypeAsync(parameters[i], availableDependencies,
                         sw, maxTaskFreezeMs, cancellationToken);
                     
                     constructorDependencies[i] = constructorDependency;
@@ -99,47 +99,7 @@ namespace VoxCake.IoC.Utilities
             }
         }
 
-        private static ConstructorInfo GetConstructorWithDependencies(Type type, object[] dependencies)
-        {
-            var constructors = type.GetConstructors(BindingFlag);
-            var constructorsCount = constructors.Length;
-            ConstructorInfo targetConstructor = null;
-
-            if (constructorsCount > 0)
-            {
-                var targetParametersCount = dependencies.Length;
-
-                foreach (var suspectConstructor in constructors)
-                {
-                    var suspectParameters = suspectConstructor.GetParameters();
-                    var suspectParametersCount = suspectParameters.Length;
-
-                    if (suspectParametersCount == targetParametersCount)
-                    {
-                        var isTargetConstructor = true;
-                        var suspectParametersTypes = GetParametersTypes(suspectParameters, suspectParametersCount);
-
-                        foreach (var dependency in dependencies)
-                        {
-                            if (!suspectParametersTypes.Contains(dependency.GetType()))
-                            {
-                                isTargetConstructor = false;
-                                break;
-                            }
-                        }
-
-                        if (isTargetConstructor)
-                        {
-                            targetConstructor = suspectConstructor;
-                        }
-                    }
-                }
-            }
-
-            return targetConstructor;
-        }
-
-        private static async Task<Dictionary<ConstructorInfo, Type[]>> GetInjectableConstructors(Type type,
+        private static async Task<Dictionary<ConstructorInfo, Type[]>> GetInjectableConstructorsAsync(Type type,
             Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
             var constructors = type.GetConstructors(BindingFlag);
@@ -162,18 +122,7 @@ namespace VoxCake.IoC.Utilities
             return constructorParamsCollection;
         }
 
-        private static Type[] GetParametersTypes(ParameterInfo[] parameters, int parametersCount)
-        {
-            var parametersTypes = new Type[parametersCount];
-            for (var i = 0; i < parametersCount; i++)
-            {
-                parametersTypes[i] = parameters[i].ParameterType;
-            }
-
-            return parametersTypes;
-        }
-        
-        private static async Task<object> GetDependencyOfType(Type type, object[] dependencies, Stopwatch sw, 
+        private static async Task<object> GetDependencyOfTypeAsync(Type type, object[] dependencies, Stopwatch sw, 
             int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
             foreach (var dependency in dependencies)
@@ -188,8 +137,19 @@ namespace VoxCake.IoC.Utilities
 
             return null;
         }
+        
+        private static Type[] GetParametersTypes(ParameterInfo[] parameters, int parametersCount)
+        {
+            var parametersTypes = new Type[parametersCount];
+            for (var i = 0; i < parametersCount; i++)
+            {
+                parametersTypes[i] = parameters[i].ParameterType;
+            }
 
-        private static object GetDependencyOfType(Type type, Dictionary<Type, object> localDependencies,
+            return parametersTypes;
+        }
+
+        private static object GetDependencyOfTypeAsync(Type type, Dictionary<Type, object> localDependencies,
             Dictionary<Type, object> globalDependencies)
         {
             return GetDependencyInCollection(type, localDependencies) 
