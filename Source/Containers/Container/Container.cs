@@ -112,12 +112,10 @@ namespace VoxCake.IoC
             var instancesLength = instances.Length;
             for (int i = 0; i < instancesLength; i++)
             {
-                ConstructorInjector.InjectDependenciesToInstance(_dependencies,
-                    GlobalContainer.dependencies, instances[i]);
+                await ConstructorInjector.InjectDependenciesToInstance(_dependencies,
+                    GlobalContainer.dependencies, instances[i], sw, maxTaskFreezeMs, cancellationToken);
                 
                 _resolveProgress = (i + 1) / (float)instancesLength;
-
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
             }
         }
 
@@ -137,9 +135,8 @@ namespace VoxCake.IoC
                     await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
                 }
 
-                ConstructorInjector.InjectDependenciesToInstance(directBindings.ToArray(), dependency);
-
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
+                await ConstructorInjector.InjectDependenciesToInstance(directBindings.ToArray(),
+                    dependency, sw, maxTaskFreezeMs, cancellationToken);
             }
         }
 

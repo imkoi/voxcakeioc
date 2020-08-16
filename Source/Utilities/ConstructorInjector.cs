@@ -1,7 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
+using VoxCake.Common.Utilities;
 
 namespace VoxCake.IoC.Utilities
 {
@@ -12,11 +17,14 @@ namespace VoxCake.IoC.Utilities
                                          | BindingFlags.Instance 
                                          | BindingFlags.InvokeMethod;
         
-        internal static void InjectDependenciesToInstance(Dictionary<Type, object> localDependencies,
-            Dictionary<Type, object> globalDependencies, object instance)
+        internal static async Task InjectDependenciesToInstance(Dictionary<Type, object> localDependencies,
+            Dictionary<Type, object> globalDependencies, object instance, Stopwatch sw, int maxTaskFreezeMs, 
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var instanceType = instance.GetType();
-            var constructorParamsCollection = GetInjectableConstructors(instanceType);
+            var constructorParamsCollection = await GetInjectableConstructors(instanceType,
+                sw, maxTaskFreezeMs, cancellationToken);
 
             foreach (var constructorParamsPair in constructorParamsCollection)
             {
@@ -33,38 +41,7 @@ namespace VoxCake.IoC.Utilities
                         globalDependencies);
                     constructorDependencies[i] = constructorDependency;
                     
-                    if (constructorDependency == null)
-                    {
-                        isInjectable = false;
-                        break;
-                    }
-                }
-
-                if (isInjectable)
-                {
-                    constructor.Invoke(instance, constructorDependencies);
-                }
-            }
-        }
-        
-        internal static void InjectDependenciesToInstance(object[] availableDependencies, object instance)
-        {
-            var instanceType = instance.GetType();
-            var constructorParamsCollection = GetInjectableConstructors(instanceType);
-
-            foreach (var constructorParamsPair in constructorParamsCollection)
-            {
-                var constructor = constructorParamsPair.Key;
-                var parameters = constructorParamsPair.Value;
-
-                var isInjectable = true;
-                var parametersCount = parameters.Length;
-                var constructorDependencies = new object[parametersCount];
-                
-                for (var i = 0; i < parametersCount; i++)
-                {
-                    var constructorDependency = GetDependencyOfType(parameters[i], availableDependencies);
-                    constructorDependencies[i] = constructorDependency;
+                    await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
                     
                     if (constructorDependency == null)
                     {
@@ -77,6 +54,48 @@ namespace VoxCake.IoC.Utilities
                 {
                     constructor.Invoke(instance, constructorDependencies);
                 }
+
+                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
+            }
+        }
+        
+        internal static async Task InjectDependenciesToInstance(object[] availableDependencies, object instance,
+            Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var instanceType = instance.GetType();
+            var constructorParamsCollection = await GetInjectableConstructors(instanceType,
+                sw, maxTaskFreezeMs, cancellationToken);
+
+            foreach (var constructorParamsPair in constructorParamsCollection)
+            {
+                var constructor = constructorParamsPair.Key;
+                var parameters = constructorParamsPair.Value;
+
+                var isInjectable = true;
+                var parametersCount = parameters.Length;
+                var constructorDependencies = new object[parametersCount];
+                
+                for (var i = 0; i < parametersCount; i++)
+                {
+                    var constructorDependency = await GetDependencyOfType(parameters[i], availableDependencies,
+                        sw, maxTaskFreezeMs, cancellationToken);
+                    
+                    constructorDependencies[i] = constructorDependency;
+
+                    if (constructorDependency == null)
+                    {
+                        isInjectable = false;
+                        break;
+                    }
+                }
+
+                if (isInjectable)
+                {
+                    constructor.Invoke(instance, constructorDependencies);
+                }
+                
+                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
             }
         }
 
@@ -120,7 +139,8 @@ namespace VoxCake.IoC.Utilities
             return targetConstructor;
         }
 
-        private static Dictionary<ConstructorInfo, Type[]> GetInjectableConstructors(Type type)
+        private static async Task<Dictionary<ConstructorInfo, Type[]>> GetInjectableConstructors(Type type,
+            Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
             var constructors = type.GetConstructors(BindingFlag);
             var constructorParamsCollection = new Dictionary<ConstructorInfo, Type[]>();
@@ -135,6 +155,8 @@ namespace VoxCake.IoC.Utilities
                     var parametersTypes = GetParametersTypes(parameters, parametersCount);
                     constructorParamsCollection.Add(constructor, parametersTypes);
                 }
+
+                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
             }
 
             return constructorParamsCollection;
@@ -150,6 +172,22 @@ namespace VoxCake.IoC.Utilities
 
             return parametersTypes;
         }
+        
+        private static async Task<object> GetDependencyOfType(Type type, object[] dependencies, Stopwatch sw, 
+            int maxTaskFreezeMs, CancellationToken cancellationToken)
+        {
+            foreach (var dependency in dependencies)
+            {
+                if (type == dependency.GetType())
+                {
+                    return dependency;
+                }
+
+                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
+            }
+
+            return null;
+        }
 
         private static object GetDependencyOfType(Type type, Dictionary<Type, object> localDependencies,
             Dictionary<Type, object> globalDependencies)
@@ -158,19 +196,6 @@ namespace VoxCake.IoC.Utilities
                    ?? GetDependencyInCollection(type, globalDependencies);
         }
 
-        private static object GetDependencyOfType(Type type, object[] dependencies)
-        {
-            foreach (var dependency in dependencies)
-            {
-                if (type == dependency.GetType())
-                {
-                    return dependency;
-                }
-            }
-
-            return null;
-        }
-        
         private static object GetDependencyInCollection(Type type, Dictionary<Type, object> collection)
         {
             if (collection.ContainsKey(type))
