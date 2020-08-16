@@ -65,6 +65,7 @@ namespace VoxCake.IoC.Bindings
             _directBindings = new List<object>();
             if (_bindingType == BindingType.DependencyBinding)
             {
+                RemoveDependencyFromLocalContainer(_dependencyKey);
                 _directBindings.Add(_dependency);
             }
         }

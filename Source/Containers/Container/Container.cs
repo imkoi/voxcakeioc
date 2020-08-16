@@ -40,9 +40,11 @@ namespace VoxCake.IoC
             OnBindDependencies?.Invoke(dependencyBinder);
 
             var dependencies = await dependencyBinder.GetDependenciesAsync(_maxTaskFreezeMs, _tokenSource.Token);
+            var directDependencies = await dependencyBinder.GetDirectDependenciesAsync(_maxTaskFreezeMs,
+                _tokenSource.Token);
             
-            await InjectDependenciesAsync(dependencies, _tokenSource.Token);
-            await InjectDirectDependenciesAsync(null, _tokenSource.Token);
+            await InjectDependenciesAsync(dependencies, _maxTaskFreezeMs, _tokenSource.Token);
+            await InjectDirectDependenciesAsync(directDependencies, _maxTaskFreezeMs, _tokenSource.Token);
             
             RegisterDependencies(dependencies);
             
@@ -101,7 +103,8 @@ namespace VoxCake.IoC
             throw new Exception($"There are no dependency \"{type.Name}\" in {GetType().Name}");
         }
         
-        private async Task InjectDependenciesAsync(object[] instances, CancellationToken cancellationToken)
+        private async Task InjectDependenciesAsync(object[] instances, int maxTaskFreezeMs,
+            CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -114,13 +117,15 @@ namespace VoxCake.IoC
                 
                 _resolveProgress = (i + 1) / (float)instancesLength;
 
-                await Awaiter.ReduceTaskFreezeAsync(sw, _maxTaskFreezeMs, cancellationToken);
+                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
             }
         }
 
         private async Task InjectDirectDependenciesAsync(Dictionary<Type, List<object>> directDependencies,
-            CancellationToken cancellationToken)
+            int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
+            var sw = Stopwatch.StartNew();
+            
             foreach (var keyValuePair in directDependencies)
             {
                 var dependency = GetDependency(keyValuePair.Key);
@@ -129,9 +134,12 @@ namespace VoxCake.IoC
                 foreach (var containerDependency in containerDependencies)
                 {
                     directBindings.Add(containerDependency.Value);
+                    await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
                 }
                 
                 BindingUtility.InjectDependenciesToInstance(directBindings.ToArray(), dependency);
+
+                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
             }
         }
 

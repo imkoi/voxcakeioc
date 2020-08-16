@@ -26,5 +26,11 @@ namespace VoxCake.IoC.Bindings
         {
             return await base.GetDependenciesAsync(maxTaskFreezeMs, cancellationToken);
         }
+        
+        internal new async Task<Dictionary<Type, List<object>>> GetDirectDependenciesAsync(int maxTaskFreezeMs,
+            CancellationToken cancellationToken)
+        {
+            return await base.GetDirectDependenciesAsync(maxTaskFreezeMs, cancellationToken);
+        }
     }
 }

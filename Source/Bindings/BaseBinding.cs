@@ -92,6 +92,7 @@ namespace VoxCake.IoC.Bindings
             var instance = InstanceAllocator.Allocate<T>();
             var bindingKey = bindingType == BindingType.ImplementationBinding ? dependencyKey : instanceType;
             
+            _localDependencies.Add(bindingKey, instance);
             _directDependencies.Add(bindingKey, directDependencies);
 
             return new EndBinding(_localDependencies, _globalDependencies, instance, bindingKey);
@@ -100,9 +101,9 @@ namespace VoxCake.IoC.Bindings
         protected IEndBinding To(object instance, Type dependencyKey, BindingType bindingType, 
             List<object> directBindings)
         {
-            var instanceType = instance.GetType();
-            var bindingKey = bindingType == BindingType.ImplementationBinding ? dependencyKey : instanceType;
+            var bindingKey = bindingType == BindingType.ImplementationBinding ? dependencyKey : instance.GetType();
 
+            _localDependencies.Add(bindingKey, instance);
             _directDependencies.Add(bindingKey, directBindings);
 
             return new EndBinding(_localDependencies, _globalDependencies, instance, bindingKey);
@@ -112,6 +113,17 @@ namespace VoxCake.IoC.Bindings
         {
             _localDependencies.Remove(dependencyKey);
             _globalDependencies.Add(dependencyKey, dependency);
+        }
+
+        protected void RemoveDependencyFromLocalContainer<T>()
+        {
+            var dependencyKey = typeof(T);
+            RemoveDependencyFromLocalContainer(dependencyKey);
+        }
+
+        protected void RemoveDependencyFromLocalContainer(Type dependencyKey)
+        {
+            _localDependencies.Remove(dependencyKey);
         }
 
         protected async Task<object[]> GetDependenciesAsync(int maxTaskFreezeMs, CancellationToken cancellationToken)
@@ -129,6 +141,13 @@ namespace VoxCake.IoC.Bindings
             await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
             
             return dependencyArray;
+        }
+        
+        protected async Task<Dictionary<Type, List<object>>> GetDirectDependenciesAsync(int maxTaskFreezeMs,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return _directDependencies;
         }
         
         private async Task AddCollectionToListAsync(IEnumerable collection, List<object> list,
