@@ -36,18 +36,22 @@ namespace VoxCake.IoC
 
         async Task IContainer.ResolveDependenciesAsync()
         {
-            var dependencyBinder = new Binder(_dependencies, GlobalContainer.dependencies);
-            OnBindDependencies?.Invoke(dependencyBinder);
-
+            var globalDependencies = new Dictionary<Type, object>();
+            var dependencyBinder = GetBindings(_dependencies, globalDependencies);
+            foreach (var dep in globalDependencies)
+            {
+                GlobalContainer.dependencies.Add(dep.Key, dep.Value);
+            }
+            
             var dependencies = await dependencyBinder.GetDependenciesAsync(_maxTaskFreezeMs, _tokenSource.Token);
-            var directDependencies = await dependencyBinder.GetDirectDependenciesAsync(_maxTaskFreezeMs,
-                _tokenSource.Token);
+            var directDependencies = await dependencyBinder.GetDirectDependenciesAsync(
+                _maxTaskFreezeMs, _tokenSource.Token);
             
             await InjectDependenciesAsync(dependencies, _maxTaskFreezeMs, _tokenSource.Token);
             await InjectDirectDependenciesAsync(directDependencies, _maxTaskFreezeMs, _tokenSource.Token);
             
             RegisterDependencies(dependencies);
-            
+
             GlobalContainer.resolvedContainers.Add(_containerHandlerType);
             OnDependenciesResolved?.Invoke();
         }
@@ -90,6 +94,15 @@ namespace VoxCake.IoC
 
             _tokenSource.Dispose();
             GlobalContainer.resolvedContainers.Remove(_containerHandlerType);
+        }
+
+        private Binder GetBindings(Dictionary<Type, object> localDependencies,
+            Dictionary<Type, object> globalDependencies)
+        {
+            var dependencyBinder = new Binder(localDependencies, globalDependencies);
+            OnBindDependencies?.Invoke(dependencyBinder);
+
+            return dependencyBinder;
         }
         
         private object GetDependency(Type type, Dictionary<Type, object> availableDependencies)
