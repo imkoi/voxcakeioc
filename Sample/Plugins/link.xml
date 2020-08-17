@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<linker>
+	<assembly fullname="VoxCake.Common" preserve="all"/>
+	<assembly fullname="VoxCake.IoC" preserve="all"/>
+	<assembly fullname="VoxCake.Framework" preserve="all"/>
+</linker>

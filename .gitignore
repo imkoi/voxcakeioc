@@ -3,4 +3,5 @@
 
 .vs/
 .idea/
-*wsd
+*.wsd
+*.meta
