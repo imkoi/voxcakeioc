@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using VoxCake.IoC.Types;
 
 namespace VoxCake.IoC.Bindings
 {

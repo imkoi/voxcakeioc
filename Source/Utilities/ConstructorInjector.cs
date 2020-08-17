@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using VoxCake.Common.Utilities;
@@ -22,47 +20,27 @@ namespace VoxCake.IoC.Utilities
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var instanceType = instance.GetType();
-            var constructorParamsCollection = await GetInjectableConstructorsAsync(instanceType,
-                sw, maxTaskFreezeMs, cancellationToken);
 
-            foreach (var constructorParamsPair in constructorParamsCollection)
-            {
-                var constructor = constructorParamsPair.Key;
-                var parameters = constructorParamsPair.Value;
-
-                var isInjectable = true;
-                var parametersCount = parameters.Length;
-                var constructorDependencies = new object[parametersCount];
-                
-                for (var i = 0; i < parametersCount; i++)
-                {
-                    var constructorDependency = GetDependencyOfTypeAsync(parameters[i], localDependencies,
-                        globalDependencies);
-                    constructorDependencies[i] = constructorDependency;
-                    
-                    await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-                    
-                    if (constructorDependency == null)
-                    {
-                        isInjectable = false;
-                        break;
-                    }
-                }
-
-                if (isInjectable)
-                {
-                    constructor.Invoke(instance, constructorDependencies);
-                }
-
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-            }
+            await InjectDependenciesToInstanceAsync(instance, sw, maxTaskFreezeMs, cancellationToken,
+                localDependencies: localDependencies,
+                globalDependencies: globalDependencies);
         }
         
         internal static async Task InjectDependenciesToInstanceAsync(object[] availableDependencies, object instance,
             Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            await InjectDependenciesToInstanceAsync(instance, sw, maxTaskFreezeMs, cancellationToken,
+                availableDependencies);
+        }
+        
+        private static async Task InjectDependenciesToInstanceAsync(object instance,
+            Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken, object[] dependenciesArray = null,
+            Dictionary<Type, object> localDependencies = null, Dictionary<Type, object> globalDependencies = null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            
             var instanceType = instance.GetType();
             var constructorParamsCollection = await GetInjectableConstructorsAsync(instanceType,
                 sw, maxTaskFreezeMs, cancellationToken);
@@ -78,8 +56,11 @@ namespace VoxCake.IoC.Utilities
                 
                 for (var i = 0; i < parametersCount; i++)
                 {
-                    var constructorDependency = await GetDependencyOfTypeAsync(parameters[i], availableDependencies,
-                        sw, maxTaskFreezeMs, cancellationToken);
+                    var constructorDependency = dependenciesArray != null 
+                        ? await GetDependencyOfTypeAsync(parameters[i], dependenciesArray, sw, maxTaskFreezeMs,
+                            cancellationToken) 
+                        : GetDependencyOfType(parameters[i], localDependencies,
+                            globalDependencies);
                     
                     constructorDependencies[i] = constructorDependency;
 
@@ -149,7 +130,7 @@ namespace VoxCake.IoC.Utilities
             return parametersTypes;
         }
 
-        private static object GetDependencyOfTypeAsync(Type type, Dictionary<Type, object> localDependencies,
+        private static object GetDependencyOfType(Type type, Dictionary<Type, object> localDependencies,
             Dictionary<Type, object> globalDependencies)
         {
             return GetDependencyInCollection(type, localDependencies) 

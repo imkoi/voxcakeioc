@@ -114,13 +114,7 @@ namespace VoxCake.IoC.Bindings
             _localDependencies.Remove(dependencyKey);
             _globalDependencies.Add(dependencyKey, dependency);
         }
-
-        protected void RemoveDependencyFromLocalContainer<T>()
-        {
-            var dependencyKey = typeof(T);
-            RemoveDependencyFromLocalContainer(dependencyKey);
-        }
-
+        
         protected void RemoveDependencyFromLocalContainer(Type dependencyKey)
         {
             _localDependencies.Remove(dependencyKey);
