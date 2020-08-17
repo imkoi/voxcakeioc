@@ -126,11 +126,10 @@ namespace VoxCake.IoC.Bindings
             _localDependencies.Remove(dependencyKey);
         }
 
-        protected async Task<object[]> GetDependenciesAsync(int maxTaskFreezeMs, CancellationToken cancellationToken)
+        protected async Task<object[]> GetDependenciesAsync(Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            
-            var sw = Stopwatch.StartNew();
+
             var dependencies = new List<object>();
 
             await AddCollectionToListAsync(_localDependencies, dependencies, sw, maxTaskFreezeMs, cancellationToken);
@@ -143,10 +142,13 @@ namespace VoxCake.IoC.Bindings
             return dependencyArray;
         }
         
-        protected async Task<Dictionary<Type, List<object>>> GetDirectDependenciesAsync(int maxTaskFreezeMs,
-            CancellationToken cancellationToken)
+        protected async Task<Dictionary<Type, List<object>>> GetDirectDependenciesAsync(Stopwatch sw, 
+            int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
+            
             return _directDependencies;
         }
         

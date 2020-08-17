@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -22,15 +23,16 @@ namespace VoxCake.IoC.Bindings
             return base.Bind(dependency);
         }
 
-        internal new async Task<object[]> GetDependenciesAsync(int maxTaskFreezeMs, CancellationToken cancellationToken)
-        {
-            return await base.GetDependenciesAsync(maxTaskFreezeMs, cancellationToken);
-        }
-        
-        internal new async Task<Dictionary<Type, List<object>>> GetDirectDependenciesAsync(int maxTaskFreezeMs,
+        internal new async Task<object[]> GetDependenciesAsync(Stopwatch sw, int maxTaskFreezeMs,
             CancellationToken cancellationToken)
         {
-            return await base.GetDirectDependenciesAsync(maxTaskFreezeMs, cancellationToken);
+            return await base.GetDependenciesAsync(sw, maxTaskFreezeMs, cancellationToken);
+        }
+        
+        internal new async Task<Dictionary<Type, List<object>>> GetDirectDependenciesAsync(Stopwatch sw,
+            int maxTaskFreezeMs, CancellationToken cancellationToken)
+        {
+            return await base.GetDirectDependenciesAsync(sw, maxTaskFreezeMs, cancellationToken);
         }
     }
 }
