@@ -31,13 +31,13 @@ namespace VoxCake.IoC.Bindings
             return base.As(instance, _dependencyKey);
         }
         
-        IDirectBinding IBinding.And<T>()
+        IRawBinding IBinding.Raw<T>()
         {
             AllocateDirectBindings();
             return base.And<T>(_dependency, _dependencyKey, _bindingType, _directBindings);
         }
         
-        IDirectBinding IBinding.And(object instance)
+        IRawBinding IBinding.Raw(object instance)
         {
             AllocateDirectBindings();
             return base.And(instance, _dependency, _dependencyKey, _bindingType, _directBindings);

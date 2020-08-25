@@ -67,22 +67,22 @@ namespace VoxCake.IoC.Bindings
             return new EndBinding(_localDependencies, _globalDependencies, instance, dependencyKey);
         }
         
-        protected IDirectBinding And<T>(object dependency, Type dependencyType, BindingType bindingType,
+        protected IRawBinding And<T>(object dependency, Type dependencyType, BindingType bindingType,
             List<object> directBindings)
         {
             var instance = InstanceAllocator.Allocate<T>();
             directBindings.Add(instance);
             
-            return new DirectBinding(_localDependencies, _globalDependencies, _directDependencies, dependency,
+            return new RawBinding(_localDependencies, _globalDependencies, _directDependencies, dependency,
                 dependencyType, bindingType, directBindings);
         }
 
-        protected IDirectBinding And(object instance, object dependency, Type dependencyType, BindingType bindingType,
+        protected IRawBinding And(object instance, object dependency, Type dependencyType, BindingType bindingType,
             List<object> directBindings)
         {
             directBindings.Add(instance);
             
-            return new DirectBinding(_localDependencies, _globalDependencies, _directDependencies, dependency,
+            return new RawBinding(_localDependencies, _globalDependencies, _directDependencies, dependency,
                 dependencyType, bindingType, directBindings);
         }
         

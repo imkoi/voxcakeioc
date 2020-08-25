@@ -5,14 +5,14 @@ using VoxCake.IoC.Types;
 
 namespace VoxCake.IoC
 {
-    internal class DirectBinding : BaseBinding, IDirectBinding
+    internal class RawBinding : BaseBinding, IRawBinding
     {
         private readonly object _dependency;
         private readonly Type _dependencyKey;
         private readonly BindingType _bindingType;
         private readonly List<object> _directBindings;
         
-        internal DirectBinding(Dictionary<Type, object> localDependencies, Dictionary<Type, object> globalDependencies,
+        internal RawBinding(Dictionary<Type, object> localDependencies, Dictionary<Type, object> globalDependencies,
             Dictionary<Type, List<object>> directDependencies, object dependency, Type dependencyKey,
             BindingType bindingType, List<object> directBindings) 
             : base(localDependencies, globalDependencies, directDependencies)
@@ -23,12 +23,12 @@ namespace VoxCake.IoC
             _directBindings = directBindings;
         }
 
-        public IDirectBinding And<T>()
+        public IRawBinding Raw<T>()
         {
             return base.And<T>(_dependency, _dependencyKey, _bindingType, _directBindings);
         }
 
-        public IDirectBinding And(object instance)
+        public IRawBinding Raw(object instance)
         {
             return base.And(instance, _dependency, _dependencyKey, _bindingType, _directBindings);
         }

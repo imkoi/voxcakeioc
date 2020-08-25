@@ -49,8 +49,8 @@
     <Compile Include="Source\Bindings\Binding\IBinding.cs" />
     <Compile Include="Source\Bindings\EndBinding\EndBinding.cs" />
     <Compile Include="Source\Bindings\EndBinding\IEndBinding.cs" />
-    <Compile Include="Source\Bindings\RawBinding\IDirectBinding.cs" />
-    <Compile Include="Source\Bindings\RawBinding\DirectBinding.cs" />
+    <Compile Include="Source\Bindings\RawBinding\IRawBinding.cs" />
+    <Compile Include="Source\Bindings\RawBinding\RawBinding.cs" />
     <Compile Include="Source\Containers\Container\Container.cs" />
     <Compile Include="Source\Containers\Container\IContainer.cs" />
     <Compile Include="Source\Containers\GlobalContainer.cs" />

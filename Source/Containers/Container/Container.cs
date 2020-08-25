@@ -13,47 +13,49 @@ namespace VoxCake.IoC
 {
     public class Container : IContainer, IDisposable
     {
-        public event Action<IBinder> OnBindDependencies;
-        public event Action OnDependenciesResolved;
+        public event Action<IBinder> BindDependencies;
+        public event Action DependenciesResolved;
 
         float IContainer.ResolveProgress => _resolveProgress;
+        Dictionary<Type, object> IContainer.Dependencies => _containerDependencies;
+        
+        private readonly Dictionary<Type, object> _localDependencies;
+        private readonly Dictionary<Type, object> _containerDependencies;
 
-        private readonly int _maxTaskFreezeMs;
-        private readonly Type _containerHandlerType;
-        private readonly Dictionary<Type, object> _dependencies;
-
+        private Type _containerToken;
         private float _resolveProgress;
         private CancellationTokenSource _tokenSource;
 
-        public Container(object containerHandler, int maxTaskFreezeMs = 16)
+        public Container(object containerHandler)
         {
-            _tokenSource = new CancellationTokenSource();
+            _localDependencies = new Dictionary<Type, object>();
+            _containerDependencies = new Dictionary<Type, object>();
 
-            _maxTaskFreezeMs = maxTaskFreezeMs;
-            _containerHandlerType = containerHandler.GetType();
-            _dependencies = new Dictionary<Type, object>();
+            _containerToken = containerHandler.GetType();
+            _tokenSource = new CancellationTokenSource();
         }
 
-        async Task IContainer.ResolveDependenciesAsync()
+        async Task IContainer.ResolveDependenciesAsync(int maxTaskFreezeMs)
         {
             var sw = Stopwatch.StartNew();
             
             var globalDependencies = new Dictionary<Type, object>();
-            var dependencyBinder = GetBindings(_dependencies, globalDependencies);
-            await AddDependenciesToGlobalContainerAsync(globalDependencies, sw, _maxTaskFreezeMs, _tokenSource.Token);
+            var dependencyBinder = GetBindings(_localDependencies, globalDependencies);
+            await AddDependenciesToGlobalContainerAsync(globalDependencies, sw, maxTaskFreezeMs, _tokenSource.Token);
+            await FillContainerDependencies(globalDependencies, sw, maxTaskFreezeMs, _tokenSource.Token);
             
-            var dependencies = await dependencyBinder.GetDependenciesAsync(sw, _maxTaskFreezeMs,
+            var dependencies = await dependencyBinder.GetDependenciesAsync(sw, maxTaskFreezeMs,
                 _tokenSource.Token);
             var directDependencies = await dependencyBinder.GetDirectDependenciesAsync(sw,
-                _maxTaskFreezeMs, _tokenSource.Token);
+                maxTaskFreezeMs, _tokenSource.Token);
             
-            await InjectDependenciesAsync(dependencies, sw, _maxTaskFreezeMs, _tokenSource.Token);
-            await InjectDirectDependenciesAsync(directDependencies, sw, _maxTaskFreezeMs, _tokenSource.Token);
+            await InjectDependenciesAsync(dependencies, sw, maxTaskFreezeMs, _tokenSource.Token);
+            await InjectDirectDependenciesAsync(directDependencies, sw, maxTaskFreezeMs, _tokenSource.Token);
             
             RegisterDependencies(dependencies);
-            MarkContainerAsResolved(_containerHandlerType);
+            MarkContainerAsResolved(_containerToken);
             
-            OnDependenciesResolved?.Invoke();
+            DependenciesResolved?.Invoke();
         }
         
         async Task IContainer.WaitForContainerResolveAsync<TContainerHandler>()
@@ -77,6 +79,11 @@ namespace VoxCake.IoC
             throw new Exception($"There are no dependency \"{typeof(TDependency).Name}\" in {GetType().Name}");
         }
 
+        void IContainer.SetToken<TContainerToken>()
+        {
+            _containerToken = typeof(TContainerToken);
+        }
+
         public void Dispose()
         {
             try
@@ -89,11 +96,11 @@ namespace VoxCake.IoC
             }
             finally
             {
-                RemoveDependencies(_dependencies);
+                RemoveDependencies(_localDependencies);
             }
 
             _tokenSource.Dispose();
-            GlobalContainer.resolvedContainers.Remove(_containerHandlerType);
+            GlobalContainer.resolvedContainers.Remove(_containerToken);
         }
 
         private async Task AddDependenciesToGlobalContainerAsync(Dictionary<Type, object> dependencies, Stopwatch sw,
@@ -114,7 +121,7 @@ namespace VoxCake.IoC
             var instancesLength = instances.Length;
             for (int i = 0; i < instancesLength; i++)
             {
-                await ConstructorInjector.InjectDependenciesToInstanceAsync(_dependencies,
+                await ConstructorInjector.InjectDependenciesToInstanceAsync(_localDependencies,
                     GlobalContainer.dependencies, instances[i], sw, maxTaskFreezeMs, cancellationToken);
                 
                 _resolveProgress = (i + 1) / (float)instancesLength;
@@ -148,7 +155,7 @@ namespace VoxCake.IoC
         {
             var dependencies = new Dictionary<Type, object>();
             
-            var availableDependencies = _dependencies.Concat(GlobalContainer.dependencies);
+            var availableDependencies = _localDependencies.Concat(GlobalContainer.dependencies);
             await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
             
             foreach (var keyValuePair in availableDependencies)
@@ -160,11 +167,27 @@ namespace VoxCake.IoC
             return dependencies;
         }
         
+        private async Task FillContainerDependencies(Dictionary<Type, object> globalDependencies, Stopwatch sw,
+            int maxTaskFreezeMs, CancellationToken cancellationToken) // TODO: Refactor this task
+        {
+            foreach (var dependency in _localDependencies)
+            {
+                _containerDependencies.Add(dependency.Key, dependency.Value);
+                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
+            }
+            
+            foreach (var dependency in globalDependencies)
+            {
+                _containerDependencies.Add(dependency.Key, dependency.Value);
+                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
+            }
+        }
+        
         private Dictionary<Type, object> GetAvailableDependencies()
         {
             var dependencies = new Dictionary<Type, object>();
             
-            var availableDependencies = _dependencies.Concat(GlobalContainer.dependencies);
+            var availableDependencies = _localDependencies.Concat(GlobalContainer.dependencies);
             foreach (var keyValuePair in availableDependencies)
             {
                 dependencies.Add(keyValuePair.Key, keyValuePair.Value);
@@ -177,7 +200,7 @@ namespace VoxCake.IoC
             Dictionary<Type, object> globalDependencies)
         {
             var dependencyBinder = new Binder(localDependencies, globalDependencies);
-            OnBindDependencies?.Invoke(dependencyBinder);
+            BindDependencies?.Invoke(dependencyBinder);
 
             return dependencyBinder;
         }
@@ -212,7 +235,7 @@ namespace VoxCake.IoC
                 RaiseDependencyCallback(keyValuePair.Value, DependencyCallbackType.OnRemove);
             }
             
-            _dependencies.Clear();
+            _localDependencies.Clear();
         }
 
         private void RaiseDependencyCallback(object dependency, DependencyCallbackType callback)
