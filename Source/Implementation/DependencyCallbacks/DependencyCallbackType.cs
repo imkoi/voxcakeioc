@@ -1,8 +1,8 @@
-﻿namespace VoxCake.IoC.Types
+﻿namespace VoxCake.IoC
 {
     internal enum DependencyCallbackType
     {
         OnRegister,
-        OnRemove
+        OnUnregister
     }
 }
