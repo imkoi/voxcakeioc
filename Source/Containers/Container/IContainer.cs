@@ -24,7 +24,7 @@ namespace VoxCake.IoC
         /// <summary>
         /// Return container dependencies;
         /// </summary>
-        Dictionary<Type, object> Dependencies { get; }
+        Dictionary<Type, Dependency> Dependencies { get; }
 
         /// <summary>
         /// Resolve and register all dependencies in container
@@ -44,7 +44,7 @@ namespace VoxCake.IoC
         /// </summary>
         /// <typeparam name="TDependencyKey"></typeparam>
         /// <returns></returns>
-        TDependencyKey GetDependency<TDependencyKey>();
+        TDependencyKey GetInstance<TDependencyKey>();
 
         /// <summary>
         /// Set container token to check if its resolved in other containers

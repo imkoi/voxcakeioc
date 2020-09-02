@@ -5,7 +5,7 @@ namespace VoxCake.IoC
 {
     internal static class GlobalContainer
     {
-        internal static Dictionary<Type, object> dependencies = new Dictionary<Type, object>();
+        internal static Dictionary<Type, Dependency> dependencies = new Dictionary<Type, Dependency>();
         internal static HashSet<Type> resolvedContainers = new HashSet<Type>();
     }
 }

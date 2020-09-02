@@ -5,11 +5,11 @@ namespace VoxCake.IoC.Bindings
 {
     internal class EndBinding : BaseBinding, IEndBinding
     {
-        private readonly object _dependency;
+        private readonly Dependency _dependency;
         private readonly Type _dependencyKey;
 
-        internal EndBinding(Dictionary<Type, object> localDependencies, Dictionary<Type, object> globalDependencies,
-            object dependency, Type dependencyKey)
+        internal EndBinding(Dictionary<Type, Dependency> localDependencies, Dictionary<Type, Dependency> globalDependencies,
+            Dependency dependency, Type dependencyKey)
             : base(localDependencies, globalDependencies, null)
         {
             _dependency = dependency;
@@ -18,7 +18,7 @@ namespace VoxCake.IoC.Bindings
         
         void IEndBinding.ToGlobalContainer()
         {
-            base.ToGlobalContainer(_dependency, _dependencyKey);
+            base.ToGlobalContainer(_dependencyKey, _dependency);
         }
     }
 }

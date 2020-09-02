@@ -54,11 +54,13 @@
     <Compile Include="Source\Containers\Container\Container.cs" />
     <Compile Include="Source\Containers\Container\IContainer.cs" />
     <Compile Include="Source\Containers\GlobalContainer.cs" />
-    <Compile Include="Source\DependencyCallbacks\IRegistrableDependency.cs" />
-    <Compile Include="Source\DependencyCallbacks\IRemovableDependency.cs" />
+    <Compile Include="Source\Dependency\Dependency.cs" />
+    <Compile Include="Source\Dependency\IRegistrableDependency.cs" />
+    <Compile Include="Source\Dependency\IRemovableDependency.cs" />
     <Compile Include="Source\Utilities\ConstructorInjector.cs" />
     <Compile Include="Source\Types\BindingType.cs" />
     <Compile Include="Source\Types\DependencyCallbackType.cs" />
+    <Compile Include="Source\Utilities\ReflectedConstructor.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

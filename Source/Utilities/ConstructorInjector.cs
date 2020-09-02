@@ -1,150 +1,54 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using VoxCake.Common.Utilities;
 
 namespace VoxCake.IoC.Utilities
 {
-    internal static class ConstructorInjector
+    public static class ConstructorInjector
     {
-        private const BindingFlags BindingFlag = BindingFlags.FlattenHierarchy 
-                                         | BindingFlags.Public 
-                                         | BindingFlags.Instance 
-                                         | BindingFlags.InvokeMethod;
-        
-        internal static async Task InjectDependenciesToInstanceAsync(Dictionary<Type, object> localDependencies,
-            Dictionary<Type, object> globalDependencies, object instance, Stopwatch sw, int maxTaskFreezeMs, 
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            await InjectDependenciesToInstanceAsync(instance, sw, maxTaskFreezeMs, cancellationToken,
-                localDependencies: localDependencies,
-                globalDependencies: globalDependencies);
-        }
-        
-        internal static async Task InjectDependenciesToInstanceAsync(object[] availableDependencies, object instance,
+        public static async Task InjectDependenciesToInstanceAsync(Dictionary<Type, Dependency> dependencies, object instance,
             Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            await InjectDependenciesToInstanceAsync(instance, sw, maxTaskFreezeMs, cancellationToken,
-                availableDependencies);
-        }
-        
-        private static async Task InjectDependenciesToInstanceAsync(object instance,
-            Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken, object[] dependenciesArray = null,
-            Dictionary<Type, object> localDependencies = null, Dictionary<Type, object> globalDependencies = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
             
             var instanceType = instance.GetType();
-            var constructorParamsCollection = await GetInjectableConstructorsAsync(instanceType,
-                sw, maxTaskFreezeMs, cancellationToken);
-
-            foreach (var constructorParamsPair in constructorParamsCollection)
-            {
-                var constructor = constructorParamsPair.Key;
-                var parameters = constructorParamsPair.Value;
-
-                var isInjectable = true;
-                var parametersCount = parameters.Length;
-                var constructorDependencies = new object[parametersCount];
+            var constructor = new ReflectedConstructor(instanceType);
+            var parameters = constructor.Parameters;
+            
+            var parametersCount = parameters.Length;
+            var constructorDependencies = new object[parametersCount];
+            
+            await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
                 
-                for (var i = 0; i < parametersCount; i++)
-                {
-                    var constructorDependency = dependenciesArray != null 
-                        ? await GetDependencyOfTypeAsync(parameters[i], dependenciesArray, sw, maxTaskFreezeMs,
-                            cancellationToken) 
-                        : GetDependencyOfType(parameters[i], localDependencies,
-                            globalDependencies);
-                    
-                    constructorDependencies[i] = constructorDependency;
-
-                    if (constructorDependency == null)
-                    {
-                        isInjectable = false;
-                        break;
-                    }
-                }
-
-                if (isInjectable)
-                {
-                    constructor.Invoke(instance, constructorDependencies);
-                }
-                
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-            }
-        }
-
-        private static async Task<Dictionary<ConstructorInfo, Type[]>> GetInjectableConstructorsAsync(Type type,
-            Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
-        {
-            var constructors = type.GetConstructors(BindingFlag);
-            var constructorParamsCollection = new Dictionary<ConstructorInfo, Type[]>();
-
-            foreach (var constructor in constructors)
-            {
-                var parameters = constructor.GetParameters();
-                var parametersCount = parameters.Length;
-
-                if (parametersCount > 0)
-                {
-                    var parametersTypes = GetParametersTypes(parameters, parametersCount);
-                    constructorParamsCollection.Add(constructor, parametersTypes);
-                }
-
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-            }
-
-            return constructorParamsCollection;
-        }
-
-        private static async Task<object> GetDependencyOfTypeAsync(Type type, object[] dependencies, Stopwatch sw, 
-            int maxTaskFreezeMs, CancellationToken cancellationToken)
-        {
-            foreach (var dependency in dependencies)
-            {
-                if (type == dependency.GetType())
-                {
-                    return dependency;
-                }
-
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-            }
-
-            return null;
-        }
-        
-        private static Type[] GetParametersTypes(ParameterInfo[] parameters, int parametersCount)
-        {
-            var parametersTypes = new Type[parametersCount];
             for (var i = 0; i < parametersCount; i++)
             {
-                parametersTypes[i] = parameters[i].ParameterType;
+                var parameterType = parameters[i];
+                var constructorDependency = GetDependencyOfType(instanceType,
+                    parameterType, dependencies);
+                
+                constructorDependencies[i] = constructorDependency;
+
+                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
             }
-
-            return parametersTypes;
+                
+            constructor.Invoke(instance, constructorDependencies);
+            
+            await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
         }
 
-        private static object GetDependencyOfType(Type type, Dictionary<Type, object> localDependencies,
-            Dictionary<Type, object> globalDependencies)
+        private static object GetDependencyOfType(Type instanceType, Type dependencyType,
+            Dictionary<Type, Dependency> collection)
         {
-            return GetDependencyInCollection(type, localDependencies) 
-                   ?? GetDependencyInCollection(type, globalDependencies);
-        }
-
-        private static object GetDependencyInCollection(Type type, Dictionary<Type, object> collection)
-        {
-            if (collection.ContainsKey(type))
+            if (collection.ContainsKey(dependencyType))
             {
-                return collection[type];
+                return collection[dependencyType];
             }
-
-            return null;
+            
+            throw new Exception($"Dependency \"{dependencyType.Name}\" for instance of {instanceType.Name}" +
+                                " not found in container!");
         }
     }
 }

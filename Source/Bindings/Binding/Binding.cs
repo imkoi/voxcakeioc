@@ -6,13 +6,13 @@ namespace VoxCake.IoC.Bindings
 {
     internal class Binding : BaseBinding, IBinding
     {
-        private readonly object _dependency;
+        private readonly Dependency _dependency;
         private readonly Type _dependencyKey;
         private readonly BindingType _bindingType;
-        private List<object> _directBindings;
+        private List<Dependency> _directBindings;
 
-        internal Binding(Dictionary<Type, object> localDependencies, Dictionary<Type, object> globalDependencies,
-            Dictionary<Type, List<object>> directDependencies, object dependency, Type dependencyKey,
+        internal Binding(Dictionary<Type, Dependency> localDependencies, Dictionary<Type, Dependency> globalDependencies,
+            Dictionary<Type, List<Dependency>> directDependencies, Dependency dependency, Type dependencyKey,
             BindingType bindingType) 
             : base(localDependencies, globalDependencies, directDependencies)
         {
@@ -34,13 +34,13 @@ namespace VoxCake.IoC.Bindings
         IRawBinding IBinding.Raw<T>()
         {
             AllocateDirectBindings();
-            return base.And<T>(_dependency, _dependencyKey, _bindingType, _directBindings);
+            return base.Raw<T>(_dependency, _dependencyKey, _bindingType, _directBindings);
         }
         
         IRawBinding IBinding.Raw(object instance)
         {
             AllocateDirectBindings();
-            return base.And(instance, _dependency, _dependencyKey, _bindingType, _directBindings);
+            return base.Raw(instance, _dependency, _dependencyKey, _bindingType, _directBindings);
         }
 
         IEndBinding IBinding.To<T>()
@@ -57,12 +57,12 @@ namespace VoxCake.IoC.Bindings
 
         void IBinding.ToGlobalContainer()
         {
-            base.ToGlobalContainer(_dependency, _dependencyKey);
+            base.ToGlobalContainer(_dependencyKey, _dependency);
         }
 
         private void AllocateDirectBindings()
         {
-            _directBindings = new List<object>();
+            _directBindings = new List<Dependency>();
             if (_bindingType == BindingType.DependencyBinding)
             {
                 RemoveDependencyFromLocalContainer(_dependencyKey);

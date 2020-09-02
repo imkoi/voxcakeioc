@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using VoxCake.Common.AsyncCollections;
 using VoxCake.Common.Utilities;
 using VoxCake.IoC.Bindings;
 using VoxCake.IoC.Types;
@@ -17,10 +18,10 @@ namespace VoxCake.IoC
         public event Action DependenciesResolved;
 
         float IContainer.ResolveProgress => _resolveProgress;
-        Dictionary<Type, object> IContainer.Dependencies => _containerDependencies;
-        
-        private readonly Dictionary<Type, object> _localDependencies;
-        private readonly Dictionary<Type, object> _containerDependencies;
+        Dictionary<Type, Dependency> IContainer.Dependencies => _containerDependencies;
+
+        private readonly Dictionary<Type, Dependency> _localDependencies;
+        private readonly Dictionary<Type, Dependency> _containerDependencies;
 
         private Type _containerToken;
         private float _resolveProgress;
@@ -28,8 +29,8 @@ namespace VoxCake.IoC
 
         public Container(object containerHandler)
         {
-            _localDependencies = new Dictionary<Type, object>();
-            _containerDependencies = new Dictionary<Type, object>();
+            _localDependencies = new Dictionary<Type, Dependency>();
+            _containerDependencies = new Dictionary<Type, Dependency>();
 
             _containerToken = containerHandler.GetType();
             _tokenSource = new CancellationTokenSource();
@@ -38,26 +39,25 @@ namespace VoxCake.IoC
         async Task IContainer.ResolveDependenciesAsync(int maxTaskFreezeMs)
         {
             var sw = Stopwatch.StartNew();
-            
-            var globalDependencies = new Dictionary<Type, object>();
+
+            var globalDependencies = new Dictionary<Type, Dependency>();
             var dependencyBinder = GetBindings(_localDependencies, globalDependencies);
             await AddDependenciesToGlobalContainerAsync(globalDependencies, sw, maxTaskFreezeMs, _tokenSource.Token);
             await FillContainerDependencies(globalDependencies, sw, maxTaskFreezeMs, _tokenSource.Token);
-            
+
             var dependencies = await dependencyBinder.GetDependenciesAsync(sw, maxTaskFreezeMs,
                 _tokenSource.Token);
             var directDependencies = await dependencyBinder.GetDirectDependenciesAsync(sw,
                 maxTaskFreezeMs, _tokenSource.Token);
-            
-            await InjectDependenciesAsync(dependencies, sw, maxTaskFreezeMs, _tokenSource.Token);
-            await InjectDirectDependenciesAsync(directDependencies, sw, maxTaskFreezeMs, _tokenSource.Token);
-            
+
+            await InjectDependenciesAsync(dependencies, directDependencies, sw, maxTaskFreezeMs, _tokenSource.Token);
+
             RegisterDependencies(dependencies);
             MarkContainerAsResolved(_containerToken);
-            
+
             DependenciesResolved?.Invoke();
         }
-        
+
         async Task IContainer.WaitForContainerResolveAsync<TContainerHandler>()
         {
             while (!IsContainerResolved<TContainerHandler>())
@@ -66,17 +66,20 @@ namespace VoxCake.IoC
             }
         }
 
-        TDependency IContainer.GetDependency<TDependency>()
+        TDependencyKey IContainer.GetInstance<TDependencyKey>()
         {
-            var dependencyType = typeof(TDependency);
+            var dependencyType = typeof(TDependencyKey);
+
+            var availableDependencies = AsyncCollections.GetMergedDictionaryAsync(
+                _localDependencies, GlobalContainer.dependencies,
+                Stopwatch.StartNew(), 0, CancellationToken.None).GetAwaiter().GetResult();
             
-            var availableDependencies = GetAvailableDependencies();
             if (availableDependencies.ContainsKey(dependencyType))
             {
-                return (TDependency)availableDependencies[dependencyType];
+                return (TDependencyKey) availableDependencies[dependencyType].Value;
             }
-            
-            throw new Exception($"There are no dependency \"{typeof(TDependency).Name}\" in {GetType().Name}");
+
+            throw new Exception($"There are no dependency \"{typeof(TDependencyKey).Name}\" in {GetType().Name}");
         }
 
         void IContainer.SetToken<TContainerToken>()
@@ -103,9 +106,11 @@ namespace VoxCake.IoC
             GlobalContainer.resolvedContainers.Remove(_containerToken);
         }
 
-        private async Task AddDependenciesToGlobalContainerAsync(Dictionary<Type, object> dependencies, Stopwatch sw,
+        private async Task AddDependenciesToGlobalContainerAsync(Dictionary<Type, Dependency> dependencies, Stopwatch sw,
             int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             foreach (var dependency in dependencies)
             {
                 GlobalContainer.dependencies.Add(dependency.Key, dependency.Value);
@@ -113,91 +118,63 @@ namespace VoxCake.IoC
             }
         }
         
-        private async Task InjectDependenciesAsync(object[] instances, Stopwatch sw, int maxTaskFreezeMs,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var instancesLength = instances.Length;
-            for (int i = 0; i < instancesLength; i++)
-            {
-                await ConstructorInjector.InjectDependenciesToInstanceAsync(_localDependencies,
-                    GlobalContainer.dependencies, instances[i], sw, maxTaskFreezeMs, cancellationToken);
-                
-                _resolveProgress = (i + 1) / (float)instancesLength;
-            }
-        }
-        
-        private async Task InjectDirectDependenciesAsync(Dictionary<Type, List<object>> directDependencies,
+        private async Task FillContainerDependencies(Dictionary<Type, Dependency> globalDependencies,
             Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
-        {
-            foreach (var keyValuePair in directDependencies)
-            {
-                var availableDependencies = await GetAvailableDependenciesAsync(sw, maxTaskFreezeMs,
-                    cancellationToken);
-                
-                var dependency = GetDependency(keyValuePair.Key, availableDependencies);
-                var dependencies = keyValuePair.Value;
-
-                foreach (var availableDependency in availableDependencies)
-                {
-                    dependencies.Add(availableDependency.Value);
-                    await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-                }
-
-                await ConstructorInjector.InjectDependenciesToInstanceAsync(dependencies.ToArray(),
-                    dependency, sw, maxTaskFreezeMs, cancellationToken);
-            }
-        }
-        
-        private async Task<Dictionary<Type, object>> GetAvailableDependenciesAsync(Stopwatch sw, int maxTaskFreezeMs,
-            CancellationToken cancellationToken)
-        {
-            var dependencies = new Dictionary<Type, object>();
-            
-            var availableDependencies = _localDependencies.Concat(GlobalContainer.dependencies);
-            await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-            
-            foreach (var keyValuePair in availableDependencies)
-            {
-                dependencies.Add(keyValuePair.Key, keyValuePair.Value);
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-            }
-
-            return dependencies;
-        }
-        
-        private async Task FillContainerDependencies(Dictionary<Type, object> globalDependencies, Stopwatch sw,
-            int maxTaskFreezeMs, CancellationToken cancellationToken) // TODO: Refactor this task
         {
             foreach (var dependency in _localDependencies)
             {
-                _containerDependencies.Add(dependency.Key, dependency.Value);
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-            }
-            
-            foreach (var dependency in globalDependencies)
-            {
-                _containerDependencies.Add(dependency.Key, dependency.Value);
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
-            }
-        }
-        
-        private Dictionary<Type, object> GetAvailableDependencies()
-        {
-            var dependencies = new Dictionary<Type, object>();
-            
-            var availableDependencies = _localDependencies.Concat(GlobalContainer.dependencies);
-            foreach (var keyValuePair in availableDependencies)
-            {
-                dependencies.Add(keyValuePair.Key, keyValuePair.Value);
+                await AsyncCollections.AddPairToCollectionAsync(dependency, _containerDependencies,
+                    sw, maxTaskFreezeMs, cancellationToken);
             }
 
-            return dependencies;
+            foreach (var dependency in globalDependencies)
+            {
+                await AsyncCollections.AddPairToCollectionAsync(dependency, _containerDependencies,
+                    sw, maxTaskFreezeMs, cancellationToken);
+            }
         }
-        
-        private Binder GetBindings(Dictionary<Type, object> localDependencies,
-            Dictionary<Type, object> globalDependencies)
+
+        private async Task InjectDependenciesAsync(Dictionary<Type, Dependency> dependencies,
+            Dictionary<Type, List<Dependency>> directDependencies,
+            Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var dependenciesCount = dependencies.Count;
+            var index = 0;
+
+            foreach (var keyValuePair in dependencies)
+            {
+                var dependency = keyValuePair.Value;
+                var dependencyKey = keyValuePair.Key;
+                if (dependency.IsInjectable)
+                {
+                    var availableDependencies = await AsyncCollections.GetMergedDictionaryAsync(
+                        _localDependencies, GlobalContainer.dependencies,
+                        sw, maxTaskFreezeMs, cancellationToken);
+
+                    if (dependency.IsDirect)
+                    {
+                        foreach (var bindedDependency in directDependencies[dependencyKey])
+                        {
+                            var dependencyPair = new KeyValuePair<Type, Dependency>(bindedDependency.GetType(),
+                                bindedDependency);
+                            await AsyncCollections.AddPairToCollectionAsync(dependencyPair, availableDependencies,
+                                sw, maxTaskFreezeMs, cancellationToken);
+                        }
+                    }
+
+                    await ConstructorInjector.InjectDependenciesToInstanceAsync(availableDependencies, dependency,
+                        sw, maxTaskFreezeMs, cancellationToken);
+                }
+
+                _resolveProgress = (index + 1) / (float) dependenciesCount;
+                index++;
+            }
+        }
+
+        private Binder GetBindings(Dictionary<Type, Dependency> localDependencies,
+            Dictionary<Type, Dependency> globalDependencies)
         {
             var dependencyBinder = new Binder(localDependencies, globalDependencies);
             BindDependencies?.Invoke(dependencyBinder);
@@ -205,67 +182,52 @@ namespace VoxCake.IoC
             return dependencyBinder;
         }
 
-        private object GetDependency(Type type, Dictionary<Type, object> availableDependencies)
+        private void RegisterDependencies(Dictionary<Type, Dependency> dependencies)
         {
-            if (availableDependencies.ContainsKey(type))
+            foreach (var keyValuePair in dependencies)
             {
-                return availableDependencies[type];
+                RaiseDependencyCallback(keyValuePair.Value, DependencyCallbackType.OnRegister);
             }
-            
-            throw new Exception($"There are no dependency \"{type.Name}\" in {GetType().Name}");
         }
-
+        
         private void MarkContainerAsResolved(Type containerHandlerType)
         {
             GlobalContainer.resolvedContainers.Add(containerHandlerType);
         }
 
-        private void RegisterDependencies(object[] dependencies)
-        {
-            foreach (var dependency in dependencies)
-            {
-                RaiseDependencyCallback(dependency, DependencyCallbackType.OnRegister);
-            }
-        }
-
-        private void RemoveDependencies(Dictionary<Type, object> dependencies)
+        private void RemoveDependencies(Dictionary<Type, Dependency> dependencies)
         {
             foreach (var keyValuePair in dependencies)
             {
                 RaiseDependencyCallback(keyValuePair.Value, DependencyCallbackType.OnRemove);
             }
-            
+
             _localDependencies.Clear();
         }
 
-        private void RaiseDependencyCallback(object dependency, DependencyCallbackType callback)
+        private void RaiseDependencyCallback(Dependency dependency, DependencyCallbackType callback)
         {
             switch (callback)
             {
                 case DependencyCallbackType.OnRegister:
-                    if (dependency is IRegistrableDependency registrableDependency)
+                    if (dependency.Value is IRegistrableDependency registrableDependency)
                     {
                         registrableDependency.OnRegister();
                     }
                     break;
                 case DependencyCallbackType.OnRemove:
-                    if (dependency is IRemovableDependency removableDependency)
+                    if (dependency.Value is IRemovableDependency removableDependency)
                     {
                         removableDependency.OnRemove();
                     }
                     break;
             }
         }
-        
+
         private bool IsContainerResolved<T>()
         {
             var targetContainer = typeof(T);
-            if (GlobalContainer.resolvedContainers.Contains(targetContainer))
-            {
-                return true;
-            }
-
-            return false;
+            return GlobalContainer.resolvedContainers.Contains(targetContainer);
         }
     }
 }

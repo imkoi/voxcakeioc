@@ -1,9 +1,10 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using VoxCake.Common.AsyncCollections;
 using VoxCake.Common.Utilities;
 using VoxCake.IoC.Types;
 
@@ -11,12 +12,13 @@ namespace VoxCake.IoC.Bindings
 {
     internal class BaseBinding
     {
-        private readonly Dictionary<Type, object> _localDependencies;
-        private readonly Dictionary<Type, object> _globalDependencies;
-        private readonly Dictionary<Type, List<object>> _directDependencies;
+        private readonly Dictionary<Type, Dependency> _localDependencies;
+        private readonly Dictionary<Type, Dependency> _globalDependencies;
+        private readonly Dictionary<Type, List<Dependency>> _directDependencies;
 
-        protected BaseBinding(Dictionary<Type, object> localDependencies, Dictionary<Type, object> globalDependencies,
-            Dictionary<Type, List<object>> directDependencies)
+        protected BaseBinding(Dictionary<Type, Dependency> localDependencies,
+            Dictionary<Type, Dependency> globalDependencies,
+            Dictionary<Type, List<Dependency>> directDependencies)
         {
             _localDependencies = localDependencies;
             _globalDependencies = globalDependencies;
@@ -30,10 +32,10 @@ namespace VoxCake.IoC.Bindings
                 ? BindingType.ImplementationBinding
                 : BindingType.DependencyBinding;
             
-            T dependency = default;
+            Dependency dependency = null;
             if (bindingType == BindingType.DependencyBinding)
             {
-                dependency = InstanceAllocator.Allocate<T>();
+                dependency = AllocateDependency<T>(dependencyKey, false);
                 _localDependencies.Add(dependencyKey, dependency);
             }
 
@@ -53,22 +55,22 @@ namespace VoxCake.IoC.Bindings
         
         protected IEndBinding As<T>(Type dependencyKey)
         {
-            var instance = InstanceAllocator.Allocate<T>();
-            
-            _localDependencies.Add(dependencyKey, instance);
+            var dependency = AllocateDependency<T>(dependencyKey, true, false);
+            _localDependencies.Add(dependencyKey, dependency);
 
             return new EndBinding(_localDependencies, _globalDependencies, instance, dependencyKey);
         }
 
         protected IEndBinding As(object instance, Type dependencyKey)
         {
-            _localDependencies.Add(dependencyKey, instance);
+            var dependency = new Dependency(dependencyKey, instance, false, false);
+            _localDependencies.Add(dependencyKey, dependency);
 
             return new EndBinding(_localDependencies, _globalDependencies, instance, dependencyKey);
         }
         
-        protected IRawBinding And<T>(object dependency, Type dependencyType, BindingType bindingType,
-            List<object> directBindings)
+        protected IRawBinding Raw<T>(object dependency, Type dependencyType, BindingType bindingType,
+            List<Dependency> directBindings)
         {
             var instance = InstanceAllocator.Allocate<T>();
             directBindings.Add(instance);
@@ -77,8 +79,8 @@ namespace VoxCake.IoC.Bindings
                 dependencyType, bindingType, directBindings);
         }
 
-        protected IRawBinding And(object instance, object dependency, Type dependencyType, BindingType bindingType,
-            List<object> directBindings)
+        protected IRawBinding Raw(object instance, object dependency, Type dependencyType, BindingType bindingType,
+            List<Dependency> directBindings)
         {
             directBindings.Add(instance);
             
@@ -86,7 +88,7 @@ namespace VoxCake.IoC.Bindings
                 dependencyType, bindingType, directBindings);
         }
         
-        protected IEndBinding To<T>(Type dependencyKey, BindingType bindingType, List<object> directDependencies)
+        protected IEndBinding To<T>(Type dependencyKey, BindingType bindingType, List<Dependency> directDependencies)
         {
             var instanceType = typeof(T);
             var instance = InstanceAllocator.Allocate<T>();
@@ -99,7 +101,7 @@ namespace VoxCake.IoC.Bindings
         }
 
         protected IEndBinding To(object instance, Type dependencyKey, BindingType bindingType, 
-            List<object> directBindings)
+            List<Dependency> directBindings)
         {
             var bindingKey = bindingType == BindingType.ImplementationBinding ? dependencyKey : instance.GetType();
 
@@ -109,7 +111,7 @@ namespace VoxCake.IoC.Bindings
             return new EndBinding(_localDependencies, _globalDependencies, instance, bindingKey);
         }
 
-        protected void ToGlobalContainer(object dependency, Type dependencyKey)
+        protected void ToGlobalContainer(Type dependencyKey, Dependency dependency)
         {
             _localDependencies.Remove(dependencyKey);
             _globalDependencies.Add(dependencyKey, dependency);
@@ -120,23 +122,23 @@ namespace VoxCake.IoC.Bindings
             _localDependencies.Remove(dependencyKey);
         }
 
-        protected async Task<object[]> GetDependenciesAsync(Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
+        protected async Task<Dictionary<Type, Dependency>> GetDependenciesAsync(Stopwatch sw, int maxTaskFreezeMs,
+            CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var dependencies = new List<object>();
+            var dependencies = new Dictionary<Type, Dependency>();
 
-            await AddCollectionToListAsync(_localDependencies, dependencies, sw, maxTaskFreezeMs, cancellationToken);
-            await AddCollectionToListAsync(_globalDependencies, dependencies, sw, maxTaskFreezeMs, cancellationToken);
-            await AddCollectionToListAsync(_directDependencies, dependencies, sw, maxTaskFreezeMs, cancellationToken);
-
-            var dependencyArray = dependencies.ToArray();
-            await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
+            await AddPairsToCollectionAsync(_localDependencies.ToArray(), dependencies,
+                sw, maxTaskFreezeMs, cancellationToken);
             
-            return dependencyArray;
+            await AddPairsToCollectionAsync(_globalDependencies.ToArray(), dependencies,
+                sw, maxTaskFreezeMs, cancellationToken);
+
+            return dependencies;
         }
         
-        protected async Task<Dictionary<Type, List<object>>> GetDirectDependenciesAsync(Stopwatch sw, 
+        protected async Task<Dictionary<Type, List<Dependency>>> GetDirectDependenciesAsync(Stopwatch sw, 
             int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -146,26 +148,21 @@ namespace VoxCake.IoC.Bindings
             return _directDependencies;
         }
         
-        private async Task AddCollectionToListAsync(IEnumerable collection, List<object> list,
+        private async Task AddPairsToCollectionAsync(KeyValuePair<Type, Dependency>[] pairs,
+            Dictionary<Type, Dependency> dependencies,
             Stopwatch sw, int maxTaskFreezeMs, CancellationToken cancellationToken)
         {
-            foreach (var suspectDependency in collection)
+            foreach (var pair in pairs)
             {
-                if (suspectDependency is KeyValuePair<Type, object> keyValuePair)
-                {
-                    list.Add(keyValuePair.Value);
-                }
-                else if(suspectDependency is KeyValuePair<Type, List<object>> bindingDependenciesPair)
-                {
-                    list.AddRange(bindingDependenciesPair.Value);
-                }
-                else
-                {
-                    list.Add(suspectDependency);
-                }
-
-                await Awaiter.ReduceTaskFreezeAsync(sw, maxTaskFreezeMs, cancellationToken);
+                await AsyncCollections.AddPairToCollectionAsync(pair, dependencies,
+                    sw, maxTaskFreezeMs, cancellationToken);
             }
+        }
+
+        private Dependency AllocateDependency<T>(Type dependencyKey, bool isDirect)
+        {
+            var instance = InstanceAllocator.Allocate<T>();
+            return new Dependency(dependencyKey, instance, true, isDirect);
         }
     }
 }
